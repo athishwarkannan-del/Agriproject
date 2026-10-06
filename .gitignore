@@ -1,0 +1,36 @@
+# Environments
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.pytest_cache/
+
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.pub-cache/
+.pub/
+frontend/build/
+frontend/.dart_tool/
+frontend/.packages
+frontend/linux/flutter/generated_plugin_registrant.cc
+frontend/macos/Flutter/GeneratedPluginRegistrant.swift
+frontend/windows/flutter/generated_plugin_registrant.cc
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+
+# Mac
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+*.swp

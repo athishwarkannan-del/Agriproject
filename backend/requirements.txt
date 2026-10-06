@@ -1,0 +1,40 @@
+# FastAPI & Server
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# Supabase
+supabase==2.13.0
+
+# AI / LLM
+google-genai==1.14.0
+
+# HTTP Client
+httpx==0.28.1
+
+# Environment & Config
+pydantic-settings==2.7.1
+python-dotenv==1.1.0
+
+# Image Processing
+# Pillow==11.2.1
+
+# Machine Learning
+# tensorflow>=2.15.0
+# numpy==2.2.3
+
+# Logging
+structlog==25.1.0
+
+# Security
+python-jose[cryptography]==3.4.0
+passlib[bcrypt]==1.7.4
+
+# Testing
+pytest==8.3.5
+pytest-asyncio==0.25.3
+httpx==0.28.1
+
+# Utilities
+python-dateutil==2.9.0
+uuid6==2024.7.10

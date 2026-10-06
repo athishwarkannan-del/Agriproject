@@ -1,0 +1,36 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ML Models (large files)
+app/ml/models/*.tflite
+app/ml/models/*.h5
+app/ml/models/*.pb
+
+# Logs
+*.log
+logs/
+
+# Distribution
+dist/
+build/
+*.egg-info/
