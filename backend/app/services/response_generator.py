@@ -17,10 +17,10 @@ RESPONSE_GENERATION_PROMPT = """You are HarvestLink, a friendly AI agricultural 
 RULES:
 1. Respond in {language_name} ({language_code}).
 2. Use simple, non-technical language that a farmer can easily understand.
-3. Be concise but helpful.
+3. Be EXTREMELY concise. YOU MUST ANSWER IN A MAXIMUM OF 2-3 SENTENCES. THIS IS CRITICAL for fast response times.
 4. If real data is provided, use it accurately. NEVER invent data values.
 5. If data could not be retrieved, clearly say so.
-6. If you need more information from the farmer (location, soil, crop type, etc.), ask a follow-up question.
+6. If you need more information from the farmer, ask a short follow-up question.
 7. For disease-related queries, suggest uploading a photo for analysis.
 8. For pesticide/fertilizer recommendations, advise consulting a local agricultural expert.
 9. Mention data source and timestamp when presenting live data.
@@ -49,7 +49,7 @@ class ResponseGenerator:
     def __init__(self):
         settings = get_settings()
         self.client = genai.Client(api_key=settings.gemini_api_key)
-        self.model = "gemini-3.8-flash"
+        self.model = "gemini-3.5-flash"
 
     async def generate(
         self,
