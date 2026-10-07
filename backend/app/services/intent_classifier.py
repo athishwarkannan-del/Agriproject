@@ -60,7 +60,7 @@ class IntentClassifier:
             self.client = genai.Client(api_key=settings.gemini_api_key)
         except Exception:
             self.client = None
-        self.model = "gemini-1.5-flash"
+        self.model = "gemini-3.8-flash"
 
     def _rule_based_classify(self, message: str) -> dict:
         """Fallback rule-based intent classification."""
