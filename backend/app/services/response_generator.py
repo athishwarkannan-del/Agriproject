@@ -25,6 +25,7 @@ RULES:
 8. For pesticide/fertilizer recommendations, advise consulting a local agricultural expert.
 9. Mention data source and timestamp when presenting live data.
 10. Use appropriate agricultural terminology in Tamil when responding in Tamil.
+11. CRITICAL: Do NOT use any Markdown formatting (like **bold** or # headings) because your response will be read aloud by a Voice Assistant. Use plain text only.
 
 CONTEXT:
 Intent: {intent}
@@ -181,7 +182,7 @@ class ResponseGenerator:
                 water_lvl = tool_data.get("water_level_ft")
                 
                 if is_ta:
-                    res = f"**{name_ta} விவரங்கள்**:\n"
+                    res = f"{name_ta} விவரங்கள்:\n"
                     res += f"• நதி: {river}\n"
                     res += f"• மாவட்டம்: {district}\n"
                     res += f"• மொத்த கொள்ளளவு: {capacity} Mcft\n"
@@ -191,7 +192,7 @@ class ResponseGenerator:
                         res += f"• நீர்மட்டம்: {round(water_lvl, 1)} ft\n"
                     return res
                 else:
-                    res = f"**{name_en} Details**:\n"
+                    res = f"{name_en} Details:\n"
                     res += f"• River: {river}\n"
                     res += f"• District: {district}\n"
                     res += f"• Capacity: {capacity} Mcft\n"
@@ -207,9 +208,9 @@ class ResponseGenerator:
             desc = tool_data.get("condition") or tool_data.get("weather")
             humidity = tool_data.get("humidity")
             if is_ta:
-                return f"**{loc} வானிலை நிலவரம்**:\n• வெப்பநிலை: {temp or '30'}°C\n• சூழல்: {desc or 'மிதமான வானிலை'}\n• ஈரப்பதம்: {humidity or '70'}%"
+                return f"{loc} வானிலை நிலவரம்:\n• வெப்பநிலை: {temp or '30'}°C\n• சூழல்: {desc or 'மிதமான வானிலை'}\n• ஈரப்பதம்: {humidity or '70'}%"
             else:
-                return f"**Weather in {loc}**:\n• Temp: {temp or '30'}°C\n• Condition: {desc or 'Clear'}\n• Humidity: {humidity or '70'}%"
+                return f"Weather in {loc}:\n• Temp: {temp or '30'}°C\n• Condition: {desc or 'Clear'}\n• Humidity: {humidity or '70'}%"
 
         if intent == "crop_information" and isinstance(tool_data, dict):
             if "crops" in tool_data:
