@@ -6,6 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../onboarding/presentation/providers/language_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class ChatMessage {
   final String text;
@@ -110,7 +111,16 @@ class AssistantNotifier extends Notifier<AssistantState> {
     if (state.isListening) {
       await _stopListening(manual: true);
     } else {
-      await _startListening();
+      // Explicitly request microphone permission
+      var status = await Permission.microphone.request();
+      if (status.isGranted) {
+        if (!_speechEnabled) {
+          await _initSpeech();
+        }
+        await _startListening();
+      } else {
+        state = state.copyWith(error: 'Microphone permission denied');
+      }
     }
   }
 

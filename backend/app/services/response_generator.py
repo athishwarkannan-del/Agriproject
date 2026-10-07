@@ -48,7 +48,7 @@ class ResponseGenerator:
     def __init__(self):
         settings = get_settings()
         self.client = genai.Client(api_key=settings.gemini_api_key)
-        self.model = "gemini-2.5-flash"
+        self.model = "gemini-1.5-flash"
 
     async def generate(
         self,

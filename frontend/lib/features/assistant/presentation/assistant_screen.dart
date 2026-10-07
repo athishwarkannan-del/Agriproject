@@ -40,6 +40,17 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
     final isTamil = ref.watch(languageProvider) == 'ta';
     final state = ref.watch(assistantProvider);
 
+    ref.listen<AssistantState>(assistantProvider, (previous, next) {
+      if (next.error != null && (previous == null || previous.error != next.error)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.error!),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    });
+
     _scrollToBottom();
 
     return Scaffold(
