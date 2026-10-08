@@ -49,7 +49,7 @@ class ResponseGenerator:
     def __init__(self):
         settings = get_settings()
         self.client = genai.Client(api_key=settings.gemini_api_key)
-        self.model = "gemini-3.5-flash"
+        self.model = "gemini-3.5-flash-lite"
 
     async def generate(
         self,
@@ -107,12 +107,12 @@ class ResponseGenerator:
         )
 
         try:
-            response = self.client.models.generate_content(
+            response = await self.client.aio.models.generate_content(
                 model=self.model,
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
                     temperature=0.7,
-                    max_output_tokens=1000,
+                    max_output_tokens=150,
                 ),
             )
 

@@ -60,7 +60,7 @@ class IntentClassifier:
             self.client = genai.Client(api_key=settings.gemini_api_key)
         except Exception:
             self.client = None
-        self.model = "gemini-3.5-flash"
+        self.model = "gemini-3.5-flash-lite"
 
     def _rule_based_classify(self, message: str) -> dict:
         """Fallback rule-based intent classification."""
@@ -151,7 +151,7 @@ class IntentClassifier:
                 message=message,
             )
 
-            response = self.client.models.generate_content(
+            response = await self.client.aio.models.generate_content(
                 model=self.model,
                 contents=prompt,
                 config=genai.types.GenerateContentConfig(
