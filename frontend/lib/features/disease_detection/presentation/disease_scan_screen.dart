@@ -322,7 +322,7 @@ class DiseaseScanScreen extends ConsumerWidget {
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () => ref.read(diseaseProvider.notifier).speakDiagnosis(),
+                  onTap: () => ref.read(diseaseProvider.notifier).speakDiagnosis(toggleIfSpeaking: true),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     margin: const EdgeInsets.only(right: 8),

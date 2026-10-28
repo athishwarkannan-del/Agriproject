@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.core.logging import get_logger
 from app.core.exceptions import DiseaseDetectionException, ImageValidationException
 from app.models.enums import DiseaseStatus
+from app.services.openrouter_service import OpenRouterService
 
 try:
     import numpy as np
@@ -177,6 +178,7 @@ class DiseaseDetectionService:
 
     def __init__(self):
         self.settings = get_settings()
+        self.openrouter = OpenRouterService()
         self.model = None
         self.model_loaded = False
         self._load_model()
@@ -218,40 +220,66 @@ class DiseaseDetectionService:
         img_array = np.expand_dims(img_array, axis=0)
         return img_array
 
-    async def _get_gemini_recommendations(self, crop_name: str, disease_name: str) -> dict:
-        """Use Gemini LLM to generate dynamic recommendations in English and Tamil."""
-        from google import genai
-        from google.genai import types
+    async def _get_gemini_recommendations(self, crop_name: str, disease_name: str) -> dict | None:
+        """Generate dynamic recommendations in English and Tamil using OpenRouter or Gemini."""
         import json
-        
-        api_key = self.settings.gemini_api_key
-        if not api_key:
-            return None
-            
-        try:
-            client = genai.Client(api_key=api_key)
-            prompt = f"""You are an expert Indian agricultural scientist. A farmer's {crop_name} crop has been diagnosed with {disease_name}. 
+
+        prompt = f"""You are an expert Indian agricultural scientist and plant pathologist. 
+A farmer's {crop_name} crop has been diagnosed with {disease_name}. 
 If it is Healthy, provide 2 short maintenance tips.
-If it is a disease, provide 3 short, practical, organic treatment methods and 2 chemical treatments. 
+If it is a disease or pest, provide 3 practical, organic treatment methods and 2 chemical treatments suitable for Indian farmers. 
 Format the output EXACTLY as valid JSON with the following structure:
 {{
   "symptoms_en": "Brief description of symptoms",
   "symptoms_ta": "தமிழ் விளக்கம் (Tamil translation of symptoms)",
-  "recommendations_en": ["Point 1", "Point 2", "Point 3"],
-  "recommendations_ta": ["பாயிண்ட் 1", "பாயிண்ட் 2", "பாயிண்ட் 3"]
+  "recommendations_en": ["Point 1", "Point 2", "Point 3", "Point 4"],
+  "recommendations_ta": ["பாயிண்ட் 1", "பாயிண்ட் 2", "பாயிண்ட் 3", "பாயிண்ட் 4"]
 }}
-"""
-            response = await client.aio.models.generate_content(
-                model='gemini-3.5-flash-lite',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
+Respond ONLY with the JSON object."""
+
+        # 1. Try OpenRouter first (fastest, primary LLM provider)
+        if self.openrouter.is_configured:
+            try:
+                res_text = await self.openrouter.chat_completion(
+                    messages=[
+                        {"role": "system", "content": "You are a professional agricultural plant pathologist. Always output valid JSON only."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.2,
+                    max_tokens=600,
                 )
-            )
-            return json.loads(response.text)
-        except Exception as e:
-            logger.error("gemini_generation_failed", error=str(e))
-            return None
+                if res_text:
+                    clean_text = res_text.strip()
+                    if clean_text.startswith("```"):
+                        clean_text = clean_text.split("\n", 1)[1] if "\n" in clean_text else clean_text[3:]
+                    if clean_text.endswith("```"):
+                        clean_text = clean_text[:-3]
+                    clean_text = clean_text.strip()
+                    data = json.loads(clean_text)
+                    if data.get("recommendations_ta") or data.get("recommendations_en"):
+                        return data
+            except Exception as e:
+                logger.error("openrouter_disease_recs_failed", error=str(e))
+
+        # 2. Fallback to Gemini if OpenRouter returned None
+        api_key = self.settings.gemini_api_key
+        if api_key:
+            try:
+                from google import genai
+                from google.genai import types
+                client = genai.Client(api_key=api_key)
+                response = await client.aio.models.generate_content(
+                    model='gemini-3.5-flash-lite',
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                    )
+                )
+                return json.loads(response.text)
+            except Exception as e:
+                logger.error("gemini_generation_failed", error=str(e))
+
+        return None
 
     async def analyze(self, image_bytes: bytes, content_type: str = "image/jpeg") -> dict:
         """
