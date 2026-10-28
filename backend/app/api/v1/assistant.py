@@ -5,18 +5,22 @@ The primary AI assistant query endpoint.
 Farmer text/voice → AI orchestration → bilingual response.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
+from pydantic import BaseModel
+from typing import Optional
 from app.core.security import get_current_user, get_optional_user
 from app.core.logging import get_logger
 from app.models.schemas import AssistantQueryRequest, AssistantQueryResponse
 from app.services.ai_orchestrator import AIOrchestrator
+from app.services.tts_service import TTSService
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/assistant", tags=["AI Assistant"])
 
-# Lazy-initialized orchestrator
+# Lazy-initialized services
 _orchestrator: AIOrchestrator | None = None
+_tts_service: TTSService | None = None
 
 
 def get_orchestrator() -> AIOrchestrator:
@@ -24,6 +28,54 @@ def get_orchestrator() -> AIOrchestrator:
     if _orchestrator is None:
         _orchestrator = AIOrchestrator()
     return _orchestrator
+
+
+def get_tts_service() -> TTSService:
+    global _tts_service
+    if _tts_service is None:
+        _tts_service = TTSService()
+    return _tts_service
+
+
+class TTSRequest(BaseModel):
+    text: str
+    language: str = "ta"
+    voice_id: Optional[str] = None
+
+
+@router.post("/tts")
+async def synthesize_speech(request: TTSRequest):
+    """
+    Synthesize text into natural voice audio using ElevenLabs Multilingual v2.
+    Returns audio/mpeg.
+    """
+    tts = get_tts_service()
+    if not tts.is_configured:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ElevenLabs TTS service is not configured.",
+        )
+
+    audio_bytes = await tts.generate_speech(
+        text=request.text,
+        language=request.language,
+        voice_id=request.voice_id,
+    )
+
+    if not audio_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to synthesize speech audio from ElevenLabs.",
+        )
+
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={
+            "Content-Disposition": "inline; filename=speech.mp3",
+            "Cache-Control": "public, max-age=86400",
+        },
+    )
 
 
 @router.post("/query", response_model=AssistantQueryResponse)

@@ -9,6 +9,7 @@ from google import genai
 from app.config import get_settings
 from app.core.logging import get_logger
 from app.models.enums import Language
+from app.services.openrouter_service import OpenRouterService
 
 logger = get_logger(__name__)
 
@@ -44,11 +45,15 @@ Generate a helpful response for the farmer:"""
 
 
 class ResponseGenerator:
-    """Generates farmer-friendly responses using Gemini AI."""
+    """Generates farmer-friendly responses using OpenRouter, Gemini AI, or template fallback."""
 
     def __init__(self):
         settings = get_settings()
-        self.client = genai.Client(api_key=settings.gemini_api_key)
+        self.openrouter = OpenRouterService()
+        try:
+            self.client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
+        except Exception:
+            self.client = None
         self.model = "gemini-3.5-flash-lite"
 
     async def generate(
@@ -107,16 +112,40 @@ class ResponseGenerator:
         )
 
         try:
-            response = await self.client.aio.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=genai.types.GenerateContentConfig(
-                    temperature=0.7,
-                    max_output_tokens=150,
-                ),
-            )
+            answer = None
 
-            answer = response.text.strip()
+            # 1. Try OpenRouter first
+            if self.openrouter.is_configured:
+                system_instruction = (
+                    "You are HarvestLink, a friendly agricultural assistant for Tamil Nadu farmers. "
+                    "Provide a direct, helpful, concise answer (2-3 sentences max) without markdown symbols."
+                )
+                answer = await self.openrouter.chat_completion(
+                    messages=[
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.7,
+                    max_tokens=250,
+                )
+
+            # 2. Fallback to Gemini if OpenRouter returned None
+            if not answer and self.client:
+                response = await self.client.aio.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config=genai.types.GenerateContentConfig(
+                        temperature=0.7,
+                        max_output_tokens=150,
+                    ),
+                )
+                answer = response.text.strip()
+
+            if not answer:
+                raise ValueError("No response generated from OpenRouter or Gemini")
+
+            # Remove any accidental markdown asterisks or hashes to keep speech clean
+            answer = answer.replace("**", "").replace("*", "").replace("#", "").strip()
 
             logger.info(
                 "response_generated",
@@ -128,7 +157,7 @@ class ResponseGenerator:
             return {
                 "answer": answer,
                 "source": source,
-                "follow_up_prompt": None,  # Could be enhanced to detect when AI asks a question
+                "follow_up_prompt": None,
             }
 
         except Exception as e:

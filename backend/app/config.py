@@ -18,8 +18,24 @@ class Settings(BaseSettings):
     supabase_anon_key: str = Field(..., description="Supabase anonymous key")
     supabase_service_role_key: str = Field(..., description="Supabase service role key")
 
-    # ─── AI / LLM ────────────────────────────────────
-    gemini_api_key: str = Field(..., description="Google Gemini API key")
+    # ─── AI / LLM (OpenRouter & Gemini) ──────────────
+    openrouter_api_key: str = Field(default="", description="OpenRouter API key")
+    openrouter_model: str = Field(
+        default="google/gemini-3.5-flash-lite",
+        description="Model to use on OpenRouter"
+    )
+    gemini_api_key: str = Field(default="", description="Google Gemini API key (optional fallback)")
+
+    # ─── Voice / TTS (ElevenLabs) ───────────────────
+    elevenlabs_api_key: str = Field(default="", description="ElevenLabs API key")
+    elevenlabs_voice_id: str = Field(
+        default="EXAVITQu4vr4xnSDxMaL",
+        description="ElevenLabs Voice ID (default: Sarah / Multilingual)"
+    )
+    elevenlabs_model_id: str = Field(
+        default="eleven_multilingual_v2",
+        description="ElevenLabs Multilingual model ID"
+    )
 
     # ─── Weather ──────────────────────────────────────
     openweathermap_api_key: str = Field(default="", description="OpenWeatherMap API key")

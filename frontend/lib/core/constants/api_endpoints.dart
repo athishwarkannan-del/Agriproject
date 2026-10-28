@@ -12,6 +12,7 @@ class ApiEndpoints {
   
   // Assistant
   static String get assistantQuery => '$baseApiUrl/assistant/query';
+  static String get assistantTts => '$baseApiUrl/assistant/tts';
   
   // Profile
   static String get profile => '$baseApiUrl/farmer/profile';

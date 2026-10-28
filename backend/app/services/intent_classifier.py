@@ -9,6 +9,7 @@ from google import genai
 from app.config import get_settings
 from app.core.logging import get_logger
 from app.models.enums import Intent, Language
+from app.services.openrouter_service import OpenRouterService
 from typing import Optional
 import json
 
@@ -52,12 +53,13 @@ User message:
 
 
 class IntentClassifier:
-    """Classifies farmer queries into intents using Gemini AI or rule-based fallback."""
+    """Classifies farmer queries into intents using OpenRouter, Gemini AI, or rule-based fallback."""
 
     def __init__(self):
         settings = get_settings()
+        self.openrouter = OpenRouterService()
         try:
-            self.client = genai.Client(api_key=settings.gemini_api_key)
+            self.client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
         except Exception:
             self.client = None
         self.model = "gemini-3.5-flash-lite"
@@ -143,24 +145,38 @@ class IntentClassifier:
             context_str = "\n".join(context_lines)
 
         try:
-            if not self.client:
-                raise ValueError("Gemini client not initialized")
-
             prompt = INTENT_CLASSIFICATION_PROMPT.format(
                 context=context_str,
                 message=message,
             )
 
-            response = await self.client.aio.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=genai.types.GenerateContentConfig(
-                    temperature=0.1,
-                    max_output_tokens=300,
-                ),
-            )
+            result_text = None
 
-            result_text = response.text.strip()
+            # 1. Try OpenRouter first
+            if self.openrouter.is_configured:
+                result_text = await self.openrouter.chat_completion(
+                    messages=[
+                        {"role": "system", "content": "You are a precise agricultural intent classifier. Respond ONLY with valid JSON."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.1,
+                    max_tokens=300,
+                )
+
+            # 2. Fallback to Gemini if OpenRouter returned None
+            if not result_text and self.client:
+                response = await self.client.aio.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config=genai.types.GenerateContentConfig(
+                        temperature=0.1,
+                        max_output_tokens=300,
+                    ),
+                )
+                result_text = response.text.strip()
+
+            if not result_text:
+                raise ValueError("No response from OpenRouter or Gemini")
 
             # Clean markdown code fences if present
             if result_text.startswith("```"):

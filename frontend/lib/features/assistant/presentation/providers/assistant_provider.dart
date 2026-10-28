@@ -1,7 +1,9 @@
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/constants/api_endpoints.dart';
@@ -59,6 +61,7 @@ final assistantProvider = NotifierProvider<AssistantNotifier, AssistantState>(As
 class AssistantNotifier extends Notifier<AssistantState> {
   final SpeechToText _speechToText = SpeechToText();
   final FlutterTts _flutterTts = FlutterTts();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   
   bool _speechEnabled = false;
   String? _conversationId;
@@ -139,8 +142,8 @@ class AssistantNotifier extends Notifier<AssistantState> {
       recognizedText: '',
     );
     
-    // Stop any ongoing TTS
-    await _flutterTts.stop();
+    // Stop any ongoing TTS or audio playback
+    await stopTts();
 
     await _speechToText.listen(
       onResult: (result) {
@@ -222,6 +225,27 @@ class AssistantNotifier extends Notifier<AssistantState> {
   }
 
   Future<void> _speak(String text, String language) async {
+    // 1. Stop any currently playing audio
+    await stopTts();
+
+    try {
+      // 2. Attempt high-quality ElevenLabs TTS from backend
+      final response = await ref.read(apiClientProvider).post(
+        ApiEndpoints.assistantTts,
+        data: {'text': text, 'language': language},
+        options: Options(responseType: ResponseType.bytes),
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final bytes = Uint8List.fromList(List<int>.from(response.data));
+        await _audioPlayer.play(BytesSource(bytes));
+        return;
+      }
+    } catch (_) {
+      // Backend TTS failed or network offline -> fallback to local flutter_tts
+    }
+
+    // 3. Fallback to on-device TTS engine
     await _flutterTts.setLanguage(language == 'ta' ? 'ta-IN' : 'en-US');
     await _flutterTts.setSpeechRate(0.9); // Normal speed
     await _flutterTts.setPitch(1.0);
@@ -234,6 +258,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
   }
   
   Future<void> stopTts() async {
+      await _audioPlayer.stop();
       await _flutterTts.stop();
   }
 
