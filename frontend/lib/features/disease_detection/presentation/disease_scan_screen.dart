@@ -23,7 +23,10 @@ class DiseaseScanScreen extends ConsumerWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.ink),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            ref.read(diseaseProvider.notifier).stopSpeaking();
+            Navigator.pop(context);
+          },
         ),
         title: Text(
           isTamil ? 'பயிர் மருத்துவர்' : 'Crop Doctor',
@@ -34,35 +37,43 @@ class DiseaseScanScreen extends ConsumerWidget {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Viewfinder / Image preview
-            _buildViewfinder(context, ref, state),
-            const SizedBox(height: 16),
-            
-            // Action buttons
-            _buildActionButtons(context, ref, state, isTamil),
-            const SizedBox(height: 16),
-            
-            // Analysis button
-            if (state.selectedImage != null && !state.isAnalyzing && state.result == null)
-              _buildAnalyzeButton(ref, isTamil),
-            
-            // Loading
-            if (state.isAnalyzing)
-              _buildAnalyzing(isTamil),
-            
-            // Results
-            if (state.result != null)
-              _buildResults(context, state, isTamil),
-            
-            // Error
-            if (state.error != null)
-              _buildError(state.error!),
-          ],
+      body: PopScope(
+        canPop: true,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) {
+            ref.read(diseaseProvider.notifier).stopSpeaking();
+          }
+        },
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Viewfinder / Image preview
+              _buildViewfinder(context, ref, state),
+              const SizedBox(height: 16),
+              
+              // Action buttons
+              _buildActionButtons(context, ref, state, isTamil),
+              const SizedBox(height: 16),
+              
+              // Analysis button
+              if (state.selectedImage != null && !state.isAnalyzing && state.result == null)
+                _buildAnalyzeButton(ref, isTamil),
+              
+              // Loading
+              if (state.isAnalyzing)
+                _buildAnalyzing(isTamil),
+              
+              // Results
+              if (state.result != null)
+                _buildResults(context, ref, state, isTamil),
+              
+              // Error
+              if (state.error != null)
+                _buildError(state.error!),
+            ],
+          ),
         ),
       ),
     );
@@ -258,7 +269,7 @@ class DiseaseScanScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildResults(BuildContext context, DiseaseState state, bool isTamil) {
+  Widget _buildResults(BuildContext context, WidgetRef ref, DiseaseState state, bool isTamil) {
     final result = state.result!;
     
     final crop = result['crop'] ?? 'Unknown';
@@ -306,6 +317,47 @@ class DiseaseScanScreen extends ConsumerWidget {
                   ),
                 ),
               ),
+              // Voice Listen / Stop Button
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => ref.read(diseaseProvider.notifier).speakDiagnosis(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: state.isSpeaking ? AppColors.terracotta.withValues(alpha: 0.15) : AppColors.turmeric.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: state.isSpeaking ? AppColors.terracotta : AppColors.ink,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          state.isSpeaking ? Icons.volume_up : Icons.volume_up_outlined,
+                          size: 16,
+                          color: state.isSpeaking ? AppColors.terracotta : AppColors.ink,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          state.isSpeaking 
+                              ? (isTamil ? 'நிறுத்து' : 'Stop') 
+                              : (isTamil ? 'கேட்க' : 'Listen'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: state.isSpeaking ? AppColors.terracotta : AppColors.ink,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
@@ -319,6 +371,33 @@ class DiseaseScanScreen extends ConsumerWidget {
               ),
             ],
           ),
+          if (state.isSpeaking) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.turmeric.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.ink.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ink),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      isTamil ? 'குரல் விளக்கம் ஒலிக்கிறது...' : 'Reading diagnosis and advice aloud...',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.ink),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const Divider(color: AppColors.ink, thickness: 1, height: 24),
           
           _buildResultRow(isTamil ? 'பயிர்' : 'Crop', crop.toString()),
