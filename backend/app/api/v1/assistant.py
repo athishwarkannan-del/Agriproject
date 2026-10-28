@@ -43,12 +43,28 @@ class TTSRequest(BaseModel):
     voice_id: Optional[str] = None
 
 
-@router.post("/tts")
-async def synthesize_speech(request: TTSRequest):
+@router.api_route("/tts", methods=["GET", "POST"])
+async def synthesize_speech(
+    request: Optional[TTSRequest] = None,
+    text: Optional[str] = None,
+    language: str = "ta",
+    voice_id: Optional[str] = None,
+):
     """
     Synthesize text into natural voice audio using ElevenLabs Multilingual v2.
+    Accepts both POST JSON and GET query parameters for direct streaming.
     Returns audio/mpeg.
     """
+    target_text = (request.text if request else text) or ""
+    target_lang = (request.language if request else language) or "ta"
+    target_voice = request.voice_id if request else voice_id
+
+    if not target_text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text parameter is required."
+        )
+
     tts = get_tts_service()
     if not tts.is_configured:
         raise HTTPException(
@@ -57,9 +73,9 @@ async def synthesize_speech(request: TTSRequest):
         )
 
     audio_bytes = await tts.generate_speech(
-        text=request.text,
-        language=request.language,
-        voice_id=request.voice_id,
+        text=target_text,
+        language=target_lang,
+        voice_id=target_voice,
     )
 
     if not audio_bytes:
@@ -74,6 +90,7 @@ async def synthesize_speech(request: TTSRequest):
         headers={
             "Content-Disposition": "inline; filename=speech.mp3",
             "Cache-Control": "public, max-age=86400",
+            "Content-Type": "audio/mpeg",
         },
     )
 

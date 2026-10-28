@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
@@ -64,7 +64,30 @@ class DiseaseNotifier extends Notifier<DiseaseState> {
   }
 
   void _initAudio() {
+    try {
+      // Configure audio routing: max speakerphone output with media audio focus
+      final audioContext = AudioContext(
+        android: const AudioContextAndroid(
+          isSpeakerphoneOn: true,
+          stayAwake: true,
+          contentType: AndroidContentType.music,
+          usageType: AndroidUsageType.media,
+          audioFocus: AndroidAudioFocus.gain,
+        ),
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.playback,
+          options: const {
+            AVAudioSessionOptions.defaultToSpeaker,
+          },
+        ),
+      );
+      AudioPlayer.global.setAudioContext(audioContext);
+    } catch (e) {
+      debugPrint('[CropDoctor Voice] AudioContext setup: $e');
+    }
+
     _audioPlayer.onPlayerStateChanged.listen((playerState) {
+      debugPrint('[CropDoctor Voice] Player state: $playerState');
       if (playerState == PlayerState.completed || playerState == PlayerState.stopped) {
         if (state.isSpeaking) {
           state = state.copyWith(isSpeaking: false);
@@ -73,12 +96,14 @@ class DiseaseNotifier extends Notifier<DiseaseState> {
     });
 
     _flutterTts.setCompletionHandler(() {
+      debugPrint('[CropDoctor Voice] FlutterTts completed');
       if (state.isSpeaking) {
         state = state.copyWith(isSpeaking: false);
       }
     });
 
-    _flutterTts.setErrorHandler((_) {
+    _flutterTts.setErrorHandler((err) {
+      debugPrint('[CropDoctor Voice] FlutterTts error: $err');
       if (state.isSpeaking) {
         state = state.copyWith(isSpeaking: false);
       }
@@ -135,16 +160,16 @@ class DiseaseNotifier extends Notifier<DiseaseState> {
       recsList = [recsRaw.trim()];
     }
 
-    // Pick top 2 key recommendation points
-    final topRecs = recsList.take(2).join('. ');
+    // Pick top recommendation item for concise, instant synthesis
+    final firstRec = recsList.isNotEmpty ? recsList.first : '';
 
     if (isTamil) {
       if (isHealthy) {
         return '$crop பயிர் ஆரோக்கியமாக உள்ளது. எந்த நோயும் கண்டறியப்படவில்லை.';
       } else {
         String text = '$crop பயிரில் $disease கண்டறியப்பட்டுள்ளது.';
-        if (topRecs.isNotEmpty) {
-          text += ' பரிந்துரை: $topRecs.';
+        if (firstRec.isNotEmpty) {
+          text += ' முக்கிய பரிந்துரை: $firstRec.';
         }
         return text;
       }
@@ -153,8 +178,8 @@ class DiseaseNotifier extends Notifier<DiseaseState> {
         return 'Your $crop plant is healthy. No disease detected.';
       } else {
         String text = '$crop has been diagnosed with $disease.';
-        if (topRecs.isNotEmpty) {
-          text += ' Recommendation: $topRecs.';
+        if (firstRec.isNotEmpty) {
+          text += ' Key advice: $firstRec.';
         }
         return text;
       }
@@ -162,13 +187,25 @@ class DiseaseNotifier extends Notifier<DiseaseState> {
   }
 
   Future<void> _speakWithFlutterTts(String text, bool isTamil) async {
+    debugPrint('[CropDoctor Voice] Attempting local FlutterTts speech: $text');
     try {
-      await _flutterTts.setLanguage(isTamil ? 'ta-IN' : 'en-US');
-      await _flutterTts.setSpeechRate(0.5); // Standard 0.5 speed for Android
+      await _flutterTts.stop();
+      if (isTamil) {
+        try {
+          await _flutterTts.setLanguage('ta-IN');
+        } catch (_) {
+          await _flutterTts.setLanguage('ta');
+        }
+      } else {
+        await _flutterTts.setLanguage('en-US');
+      }
+      await _flutterTts.setSpeechRate(0.5); // Standard 0.5 normal speed on Android
       await _flutterTts.setVolume(1.0);
       await _flutterTts.setPitch(1.0);
-      await _flutterTts.speak(text);
-    } catch (_) {
+      final res = await _flutterTts.speak(text);
+      debugPrint('[CropDoctor Voice] FlutterTts result: $res');
+    } catch (e) {
+      debugPrint('[CropDoctor Voice] FlutterTts exception: $e');
       if (state.isSpeaking) {
         state = state.copyWith(isSpeaking: false);
       }
@@ -179,51 +216,62 @@ class DiseaseNotifier extends Notifier<DiseaseState> {
     Map<String, dynamic>? resultData,
     bool toggleIfSpeaking = false,
   }) async {
-    // If user tapped listen/stop button while already speaking, stop and exit
+    // If user tapped listen/stop button while already speaking, stop playback
     if (toggleIfSpeaking && state.isSpeaking) {
+      debugPrint('[CropDoctor Voice] Stopping speech on user toggle');
       await stopSpeaking();
       return;
     }
 
-    // Ensure any previous audio is stopped before new speech begins
+    // Stop any previous speech before starting
     await stopSpeaking();
 
     final result = resultData ?? state.result;
-    if (result == null) return;
+    if (result == null) {
+      debugPrint('[CropDoctor Voice] No result data found to speak');
+      return;
+    }
 
     final lang = ref.read(languageProvider);
     final isTamil = lang == 'ta';
     final textToSpeak = _buildDiagnosisSpeechText(result, isTamil);
 
+    debugPrint('[CropDoctor Voice] Speaking text: $textToSpeak');
     state = state.copyWith(isSpeaking: true);
 
+    // ── Method 1: ElevenLabs Multilingual TTS via backend POST -> DeviceFileSource ──
     try {
-      // 1. Try ElevenLabs TTS through backend API
+      debugPrint('[CropDoctor Voice] Requesting ElevenLabs audio from backend: ${ApiEndpoints.assistantTts}');
       final response = await ref.read(apiClientProvider).post(
         ApiEndpoints.assistantTts,
         data: {'text': textToSpeak, 'language': lang},
         options: Options(
           responseType: ResponseType.bytes,
           headers: {'Accept': '*/*'},
+          receiveTimeout: const Duration(seconds: 15),
+          sendTimeout: const Duration(seconds: 10),
         ),
       );
 
       if (response.statusCode == 200 && response.data != null) {
         final bytes = Uint8List.fromList(List<int>.from(response.data));
+        debugPrint('[CropDoctor Voice] Received ${bytes.length} audio bytes from ElevenLabs');
         
-        // Write to local temporary MP3 file for 100% reliable Android MediaPlayer playback
         final tempDir = await getTemporaryDirectory();
         final audioFile = File('${tempDir.path}/crop_diagnosis_voice.mp3');
         await audioFile.writeAsBytes(bytes, flush: true);
 
+        await _audioPlayer.stop();
+        await _audioPlayer.setVolume(1.0);
         await _audioPlayer.play(DeviceFileSource(audioFile.path));
+        debugPrint('[CropDoctor Voice] DeviceFileSource launched successfully');
         return;
       }
-    } catch (_) {
-      // Backend TTS failed or network offline -> fallback to local on-device TTS
+    } catch (downloadErr) {
+      debugPrint('[CropDoctor Voice] ElevenLabs backend TTS failed: $downloadErr. Falling back to local TTS...');
     }
 
-    // 2. Fallback to on-device TTS
+    // ── Method 2: Fallback to on-device TTS engine ────────────────
     await _speakWithFlutterTts(textToSpeak, isTamil);
   }
 

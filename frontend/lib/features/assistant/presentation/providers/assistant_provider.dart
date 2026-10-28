@@ -1,9 +1,11 @@
-import 'dart:typed_data';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../../core/network/api_client.dart';
 import '../../../../core/constants/api_endpoints.dart';
@@ -97,7 +99,25 @@ class AssistantNotifier extends Notifier<AssistantState> {
   }
   
   Future<void> _initTts() async {
-     await _flutterTts.awaitSpeakCompletion(true);
+    try {
+      final audioContext = AudioContext(
+        android: const AudioContextAndroid(
+          isSpeakerphoneOn: true,
+          stayAwake: true,
+          contentType: AndroidContentType.music,
+          usageType: AndroidUsageType.media,
+          audioFocus: AndroidAudioFocus.gain,
+        ),
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.playback,
+          options: const {
+            AVAudioSessionOptions.defaultToSpeaker,
+          },
+        ),
+      );
+      AudioPlayer.global.setAudioContext(audioContext);
+    } catch (_) {}
+    await _flutterTts.awaitSpeakCompletion(true);
   }
 
   void _handleSpeechError(String errorMsg) {
@@ -233,23 +253,39 @@ class AssistantNotifier extends Notifier<AssistantState> {
       final response = await ref.read(apiClientProvider).post(
         ApiEndpoints.assistantTts,
         data: {'text': text, 'language': language},
-        options: Options(responseType: ResponseType.bytes),
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'Accept': '*/*'},
+          receiveTimeout: const Duration(seconds: 15),
+          sendTimeout: const Duration(seconds: 10),
+        ),
       );
 
       if (response.statusCode == 200 && response.data != null) {
         final bytes = Uint8List.fromList(List<int>.from(response.data));
-        await _audioPlayer.play(BytesSource(bytes));
+        final tempDir = await getTemporaryDirectory();
+        final audioFile = File('${tempDir.path}/assistant_voice.mp3');
+        await audioFile.writeAsBytes(bytes, flush: true);
+
+        await _audioPlayer.stop();
+        await _audioPlayer.setVolume(1.0);
+        await _audioPlayer.play(DeviceFileSource(audioFile.path));
         return;
       }
-    } catch (_) {
-      // Backend TTS failed or network offline -> fallback to local flutter_tts
+    } catch (e) {
+      debugPrint('[Assistant Voice] Backend TTS fallback: $e');
     }
 
     // 3. Fallback to on-device TTS engine
-    await _flutterTts.setLanguage(language == 'ta' ? 'ta-IN' : 'en-US');
-    await _flutterTts.setSpeechRate(0.9); // Normal speed
-    await _flutterTts.setPitch(1.0);
-    await _flutterTts.speak(text);
+    try {
+      await _flutterTts.setLanguage(language == 'ta' ? 'ta-IN' : 'en-US');
+      await _flutterTts.setSpeechRate(0.5);
+      await _flutterTts.setVolume(1.0);
+      await _flutterTts.setPitch(1.0);
+      await _flutterTts.speak(text);
+    } catch (e) {
+      debugPrint('[Assistant Voice] FlutterTts error: $e');
+    }
   }
   
   Future<void> playTts(String text) async {
